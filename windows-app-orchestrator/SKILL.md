@@ -194,9 +194,11 @@ The build skill has its own modes (ADD/FIX/SHIP) - no skill transition needed.
 
 ```
 After Feature Completion (ADD Mode):
-1. Run quick audit automatically
-2. If issues found → report and offer to fix
-3. If clean → continue
+1. Run tests to verify
+2. Run quick audit automatically
+3. If issues found → report and offer to fix
+4. If clean → Restart server to apply changes
+5. Verify changes work in browser
 
 Before SHIP Mode:
 1. Run full audit (all 5 agents in parallel)
@@ -207,8 +209,10 @@ Before SHIP Mode:
 
 After Bug Fix (FIX Mode):
 1. Run targeted audit on affected files
-2. Verify fix doesn't introduce new issues
-3. Add regression test suggestion
+2. Run tests to verify fix
+3. Restart server to apply changes
+4. Verify fix doesn't introduce new issues
+5. Add regression test suggestion
 ```
 
 ---

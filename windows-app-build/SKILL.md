@@ -96,12 +96,16 @@ Applications must be robust and fool-proof:
 - [ ] Create only new files needed
 - [ ] Register new routes in main.py
 - [ ] Add tests for new feature
+- [ ] Run tests to verify
+- [ ] **Restart server** to apply changes
 - [ ] Update CHANGELOG.md
 
 ### Mode: FIX (Bug/Regression)
 - [ ] Identify affected file(s)
 - [ ] Make minimal change to fix
 - [ ] Add regression test
+- [ ] Run tests to verify
+- [ ] **Restart server** to apply changes
 - [ ] Update ERROR-AND-FIXES-LOG.md
 - [ ] Update build ID
 
@@ -185,6 +189,44 @@ if %errorlevel% equ 0 (
     )
 )
 ```
+
+### Server Restart After Changes (CRITICAL)
+
+**Always restart the server after completing code changes.** Python/FastAPI requires a restart to load modified code.
+
+**Restart Scripts (use project-specific scripts if available):**
+
+```batch
+REM Quick restart (kills existing, starts new)
+scripts\restart.bat
+
+REM Graceful restart (waits for requests to complete)
+scripts\restart-safe.bat
+```
+
+**Generic restart command:**
+
+```batch
+REM Find and kill existing Python/uvicorn process
+taskkill /f /im python.exe 2>nul
+timeout /t 2 /nobreak >nul
+
+REM Start server
+cd /d "%APP_DIR%"
+start "" venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8008
+```
+
+**When to restart:**
+| Situation | Restart Required |
+|-----------|-----------------|
+| Modified Python files (.py) | Yes |
+| Modified templates (.html) | No (Jinja2 reloads) |
+| Modified static files (.js, .css) | No (browser refresh) |
+| Added new routes | Yes |
+| Changed models | Yes |
+| Changed config | Yes |
+
+**Rule:** After completing any code change, run tests THEN restart the server.
 
 ### Session Cookie Access
 
@@ -913,6 +955,8 @@ grep -r "session_token" app/routes/ --include="*.py"
 | "no such column" after model change | Missing DB migration | Run `ALTER TABLE x ADD COLUMN y` |
 | Email links go to wrong portal | Static public URL | Use `get_request_url_for_recipient()` |
 | Dark mode shows white boxes | Using `bg-light` class | Replace with `bg-body-secondary` |
+| Code changes not appearing | Server not restarted | Run `scripts\restart.bat` |
+| New route returns 404 | Server not restarted | Restart to load new routes |
 
 ---
 
@@ -1229,11 +1273,14 @@ Example: v9.0.1 Build 26002-1430 = January 2, 2026 at 2:30 PM
 
 ### Ending a Session
 
-1. Update CHANGELOG.md
-2. Update state file
-3. Run pre-delivery checklist
-4. Package excluding forbidden files
-5. Deliver with summary
+1. Run tests to verify changes
+2. **Restart server** to apply changes
+3. Verify changes work in browser
+4. Update CHANGELOG.md
+5. Update state file
+6. Run pre-delivery checklist
+7. Package excluding forbidden files
+8. Deliver with summary
 
 ### State File Template
 
@@ -1304,6 +1351,13 @@ Each audit has specific grep commands and checklists. Run all audits before majo
 # Only load when running full audits
 "/mnt/skills/user/windows-app-build/references/audit-checklists.md"
 ```
+
+**After code changes, validate integration:**
+- Load `integration-validator` skill for:
+  - Database schema vs model validation
+  - Template block inheritance checks
+  - Frontend dependency verification
+- Especially important after model changes or new templates
 
 ---
 

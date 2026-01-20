@@ -312,6 +312,62 @@ INSTALLATION TEST
 
 ---
 
+## Audit 8: Integration Validation
+
+```
+═══════════════════════════════════════════════════════════════
+DATABASE SCHEMA SYNC
+═══════════════════════════════════════════════════════════════
+[ ] All model columns exist in production database
+[ ] Column types match (String vs Text, Integer vs BigInteger)
+[ ] Foreign keys exist and reference valid tables
+[ ] Indexes defined in model exist in database
+[ ] No orphan columns in database (removed from model)
+
+Run schema validation:
+python -c "from app.models import *; from app.database import engine; from sqlalchemy import inspect; ..."
+
+═══════════════════════════════════════════════════════════════
+MODEL ATTRIBUTE ACCESS
+═══════════════════════════════════════════════════════════════
+[ ] All model.field references use correct field names
+[ ] No typos in common fields (expiry vs expiration, date vs datetime)
+[ ] Relationship names match model definitions
+[ ] Enum values used correctly (Status.ACTIVE not "active")
+
+Check for common errors:
+grep -rn "\.next_maintenance_date" app/ --include="*.py"  # Should be .next_maintenance
+grep -rn "\.warranty_expiration" app/ --include="*.py"    # Should be .warranty_expiry
+
+═══════════════════════════════════════════════════════════════
+TEMPLATE INHERITANCE
+═══════════════════════════════════════════════════════════════
+[ ] Child templates use correct parent block names
+[ ] Admin templates use admin_content (NOT content)
+[ ] JavaScript uses extra_js (NOT scripts)
+[ ] Page titles use page_title block
+[ ] All {% block X %} have matching {% endblock %}
+
+Check for wrong blocks:
+grep -rn "{% block content %}" app/templates/admin/ --include="*.html"  # Should be empty
+grep -rn "{% block scripts %}" app/templates/admin/ --include="*.html"  # Should be empty
+
+═══════════════════════════════════════════════════════════════
+FRONTEND DEPENDENCIES
+═══════════════════════════════════════════════════════════════
+[ ] All JavaScript libraries used are loaded in templates
+[ ] CDN URLs use specific versions (not "latest")
+[ ] JavaScript files load AFTER their dependencies
+[ ] No duplicate library loads
+[ ] Development vs production CDN URLs correct
+
+Check library loading:
+grep -rn "new Chart" app/static/js/ --include="*.js"  # Find usage
+grep -rn "chart.js" app/templates/base.html            # Verify CDN
+```
+
+---
+
 ## Error Prevention Quick Reference
 
 | Always Do This | Prevents |
