@@ -1141,4 +1141,164 @@ User.display_name       # Actually: @property, not Column
 
 ---
 
+## Robust Server Restart Script (PowerShell)
+
+Production-grade restart script with port-based detection and health verification.
+
+**Key learnings incorporated:**
+1. Uses `$ProcessId` not `$Pid` (reserved variable)
+2. Uses `cmd /c` wrapper for paths with spaces
+3. Verifies health after restart
+
+```powershell
+# scripts/restart-server.ps1
+param(
+    [int]$Port = 8004,
+    [switch]$Background,
+    [int]$Timeout = 30
+)
+
+$ErrorActionPreference = "Continue"
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$ProjectDir = Split-Path -Parent $ScriptDir
+$LogDir = Join-Path $ProjectDir "instance\logs"
+$LogFile = Join-Path $LogDir "restart.log"
+
+if (-not (Test-Path $LogDir)) {
+    New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
+}
+
+function Write-Log {
+    param([string]$Message)
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $logMessage = "[$timestamp] $Message"
+    Write-Host $logMessage
+    Add-Content -Path $LogFile -Value $logMessage
+}
+
+function Get-ProcessByPort {
+    param([int]$Port)
+    $connections = netstat -ano | Select-String ":$Port\s+.*LISTENING"
+    foreach ($conn in $connections) {
+        if ($conn -match '\s+(\d+)\s*$') {
+            return [int]$Matches[1]
+        }
+    }
+    return $null
+}
+
+function Stop-ServerGraceful {
+    param([int]$ProcessId, [int]$Timeout)  # NOTE: $ProcessId not $Pid!
+
+    Write-Log "Stopping PID $ProcessId..."
+    try {
+        $process = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
+        if (-not $process) { return $true }
+
+        Stop-Process -Id $ProcessId -ErrorAction SilentlyContinue
+
+        $startTime = Get-Date
+        while ((Get-Date) - $startTime -lt [TimeSpan]::FromSeconds($Timeout)) {
+            if (-not (Get-Process -Id $ProcessId -ErrorAction SilentlyContinue)) {
+                Write-Log "Process $ProcessId stopped"
+                return $true
+            }
+            Start-Sleep -Milliseconds 500
+        }
+
+        # Force kill
+        Stop-Process -Id $ProcessId -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 2
+        return $true
+    }
+    catch {
+        Write-Log "Error: $_"
+        return $false
+    }
+}
+
+function Start-Server {
+    param([switch]$Background)
+
+    $pythonExe = Join-Path $ProjectDir "python\python.exe"
+    if (-not (Test-Path $pythonExe)) { $pythonExe = "python" }
+    $runScript = Join-Path $ProjectDir "run_server.py"
+
+    Write-Log "Starting server..."
+
+    if ($Background) {
+        # CRITICAL: Use cmd /c for paths with spaces
+        $cmd = "cmd"
+        $args = "/c `"cd /d `"$ProjectDir`" && `"$pythonExe`" `"$runScript`"`""
+        Start-Process -FilePath $cmd -ArgumentList $args -WindowStyle Hidden
+    }
+    else {
+        Start-Process -FilePath $pythonExe -ArgumentList "`"$runScript`"" -NoNewWindow -WorkingDirectory $ProjectDir
+    }
+    return $true
+}
+
+function Test-ServerHealth {
+    param([int]$Port, [int]$MaxAttempts = 10)
+
+    $healthUrl = "http://localhost:$Port/health"
+    for ($i = 1; $i -le $MaxAttempts; $i++) {
+        try {
+            $response = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 5
+            if ($response.StatusCode -eq 200) {
+                Write-Log "Server healthy (attempt $i)"
+                return $true
+            }
+        }
+        catch {
+            Write-Log "Health check $i/$MaxAttempts failed"
+        }
+        Start-Sleep -Seconds 2
+    }
+    return $false
+}
+
+# Main execution
+Write-Log "========== Restart Port $Port =========="
+
+$existingPid = Get-ProcessByPort -Port $Port
+if ($existingPid) {
+    Stop-ServerGraceful -ProcessId $existingPid -Timeout $Timeout
+}
+
+Start-Sleep -Seconds 1
+Start-Server -Background:$Background
+Start-Sleep -Seconds 3
+
+if (Test-ServerHealth -Port $Port) {
+    Write-Log "SUCCESS: http://localhost:$Port"
+    exit 0
+} else {
+    Write-Log "WARNING: Started but health check failed"
+    exit 1
+}
+```
+
+**Batch wrapper (scripts/restart-server.bat):**
+
+```batch
+@echo off
+setlocal EnableDelayedExpansion
+title Server Restart
+cd /d "%~dp0\.."
+
+set "BG="
+:parse
+if "%~1"=="" goto :run
+if /i "%~1"=="-bg" set "BG=-Background"
+shift
+goto :parse
+
+:run
+powershell -ExecutionPolicy Bypass -File "scripts\restart-server.ps1" %BG%
+if "%BG%"=="" pause
+```
+
+---
+
 *End of Build Templates Reference*

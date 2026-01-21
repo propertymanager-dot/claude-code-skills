@@ -243,6 +243,56 @@ Start-Sleep 3
 
 **Rule:** After completing any code change, run tests THEN restart the server using the PowerShell script.
 
+### PowerShell Script Gotchas (CRITICAL)
+
+When writing PowerShell scripts for Windows automation:
+
+**1. Reserved Automatic Variables**
+
+PowerShell has read-only automatic variables that cannot be used as parameter or variable names:
+
+```powershell
+# WRONG - $PID is reserved (current process ID)
+function Stop-Server {
+    param([int]$Pid)  # ERROR: Cannot overwrite variable Pid
+}
+
+# RIGHT - use different name
+function Stop-Server {
+    param([int]$ProcessId)
+}
+```
+
+**Common reserved variables to avoid:** `$PID`, `$PWD`, `$HOME`, `$HOST`, `$TRUE`, `$FALSE`, `$NULL`, `$ERROR`
+
+**2. Paths with Spaces in Start-Process**
+
+Start-Process has quirky behavior with paths containing spaces, especially in background mode:
+
+```powershell
+# WRONG - fails silently with paths like "C:\Program Files\..."
+Start-Process -FilePath $pythonExe -ArgumentList $script -WindowStyle Hidden
+
+# RIGHT - wrap in cmd /c with proper escaping
+$cmd = "cmd"
+$args = "/c `"cd /d `"$ProjectDir`" && `"$pythonExe`" `"$script`"`""
+Start-Process -FilePath $cmd -ArgumentList $args -WindowStyle Hidden
+```
+
+**3. Error Handling Best Practice**
+
+```powershell
+$ErrorActionPreference = "Continue"  # Don't stop on non-terminating errors
+
+try {
+    # Operation
+}
+catch {
+    Write-Log "Error: $_"
+    return $false
+}
+```
+
 ### Session Cookie Access
 
 ```python
@@ -972,6 +1022,9 @@ grep -r "session_token" app/routes/ --include="*.py"
 | Dark mode shows white boxes | Using `bg-light` class | Replace with `bg-body-secondary` |
 | Code changes not appearing | Server not restarted | Run `scripts\restart-server.bat -bg` |
 | New route returns 404 | Server not restarted | Run PowerShell restart script |
+| "Cannot overwrite variable Pid" | `$PID` is reserved in PowerShell | Use `$ProcessId` instead |
+| Start-Process fails with spaces | Path contains spaces | Use `cmd /c` wrapper with proper quoting |
+| Background process doesn't start | Start-Process path handling | Wrap in `cmd /c "cd /d ... && ..."` |
 
 ---
 
