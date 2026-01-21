@@ -197,8 +197,8 @@ After Feature Completion (ADD Mode):
 1. Run tests to verify
 2. Run quick audit automatically
 3. If issues found → report and offer to fix
-4. If clean → Restart server to apply changes
-5. Verify changes work in browser
+4. If clean → Restart server using: scripts\restart-server.bat -bg
+5. Verify changes work in browser (check /health endpoint)
 
 Before SHIP Mode:
 1. Run full audit (all 5 agents in parallel)
@@ -210,9 +210,15 @@ Before SHIP Mode:
 After Bug Fix (FIX Mode):
 1. Run targeted audit on affected files
 2. Run tests to verify fix
-3. Restart server to apply changes
-4. Verify fix doesn't introduce new issues
+3. Restart server: powershell -ExecutionPolicy Bypass -File scripts\restart-server.ps1 -Background
+4. Verify fix via /health endpoint and browser test
 5. Add regression test suggestion
+
+Server Restart Command (reliable):
+  powershell -ExecutionPolicy Bypass -File scripts\restart-server.ps1 -Background
+  - Kills by port (not process name)
+  - Waits for port release
+  - Verifies /health after start
 ```
 
 ---

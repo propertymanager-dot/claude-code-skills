@@ -194,26 +194,41 @@ if %errorlevel% equ 0 (
 
 **Always restart the server after completing code changes.** Python/FastAPI requires a restart to load modified code.
 
-**Restart Scripts (use project-specific scripts if available):**
+**RECOMMENDED: Robust PowerShell Restart** (port-based, with health verification):
 
-```batch
-REM Quick restart (kills existing, starts new)
-scripts\restart.bat
+```powershell
+# Background restart with health check (PREFERRED)
+powershell -ExecutionPolicy Bypass -File scripts\restart-server.ps1 -Background
 
-REM Graceful restart (waits for requests to complete)
-scripts\restart-safe.bat
+# Or via batch wrapper
+scripts\restart-server.bat -bg
 ```
 
-**Generic restart command:**
+**Features of restart-server.ps1:**
+- Finds process by port (more reliable than by name)
+- Graceful shutdown attempt before force kill
+- Waits for port to be released before starting
+- Verifies server health via /health endpoint
+- Logs to instance/logs/restart.log
+
+**Legacy restart scripts (interactive use only):**
 
 ```batch
-REM Find and kill existing Python/uvicorn process
-taskkill /f /im python.exe 2>nul
-timeout /t 2 /nobreak >nul
+scripts\restart.bat           REM Quick restart
+scripts\restart-safe.bat      REM Graceful restart
+```
 
-REM Start server
-cd /d "%APP_DIR%"
-start "" venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8008
+**Fallback restart command (if no scripts available):**
+
+```powershell
+# Kill by port, wait, start, verify
+$port = 8008
+$proc = netstat -ano | Select-String ":$port\s+.*LISTENING" | ForEach-Object { if ($_ -match '\s+(\d+)\s*$') { $Matches[1] } }
+if ($proc) { Stop-Process -Id $proc -Force -ErrorAction SilentlyContinue }
+Start-Sleep 2
+Start-Process -FilePath "venv\Scripts\python.exe" -ArgumentList "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "$port" -NoNewWindow
+Start-Sleep 3
+(Invoke-WebRequest -Uri "http://localhost:$port/health" -UseBasicParsing).Content
 ```
 
 **When to restart:**
@@ -226,7 +241,7 @@ start "" venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8
 | Changed models | Yes |
 | Changed config | Yes |
 
-**Rule:** After completing any code change, run tests THEN restart the server.
+**Rule:** After completing any code change, run tests THEN restart the server using the PowerShell script.
 
 ### Session Cookie Access
 
@@ -955,8 +970,8 @@ grep -r "session_token" app/routes/ --include="*.py"
 | "no such column" after model change | Missing DB migration | Run `ALTER TABLE x ADD COLUMN y` |
 | Email links go to wrong portal | Static public URL | Use `get_request_url_for_recipient()` |
 | Dark mode shows white boxes | Using `bg-light` class | Replace with `bg-body-secondary` |
-| Code changes not appearing | Server not restarted | Run `scripts\restart.bat` |
-| New route returns 404 | Server not restarted | Restart to load new routes |
+| Code changes not appearing | Server not restarted | Run `scripts\restart-server.bat -bg` |
+| New route returns 404 | Server not restarted | Run PowerShell restart script |
 
 ---
 
